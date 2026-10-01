@@ -2884,6 +2884,15 @@ function viewWatch() {
   const today = todayISO();
   const to = addDays(today, DB.watchDays);
   let h = '';
+  
+  // 如果有月份不符，顯示提示
+  if (hasMonthMismatch) {
+    h += '<div class="notice" style="background:var(--amber-soft);border:1px solid var(--amber-line);padding:12px;margin-bottom:12px;border-radius:3px">' +
+      '<b>⚠️ 月份不符：</b>目前選擇 <b>' + esc(DB.filter.month || '—') + '</b>，但資料月份為 <b>' + esc(D.month || '—') + '</b>。<br>' +
+      '以下顯示所有未到檢的預約（不限日期）。' +
+      '</div>';
+  }
+  
   // 控制列
   let ctrl = '<div class="srcline">' +
     '<span class="field"><label>檢視未來</label><span class="seg">' +
@@ -2894,27 +2903,39 @@ function viewWatch() {
       return '<button class="chip" data-risk="' + x.id + '" aria-pressed="' + DB.watchRisk.has(x.id) + '">' + esc(x.name) + '</button>';
     }).join('') + '</span></span></div>';
 
-  // 如果篩選後沒有資料，放寬條件顯示所有未到檢的預約
-  let rows = detailRows().filter(function (r) {
-    // 只保留生技客服業務（排除企檢、診所、通路等非業務部門）
-    if (r[C.biz] < 0) return false;
-    const d = r[C.d];
-    if (!d) return false;
-    // 先嘗試符合日期範圍
-    if (d >= today && d <= to) {
-      if (r[C.att] === 1) return false;
-      return true;
-    }
-    return false;
+  // 取得所有生技客服業務的預約
+  const allBizRows = detailRows().filter(function (r) {
+    return r[C.biz] >= 0;  // 只保留生技客服業務
   });
 
-  // 如果未來日期沒有資料，顯示所有未到檢的預約（無論日期）
-  if (rows.length === 0) {
-    rows = detailRows().filter(function (r) {
-      // 只保留生技客服業務
-      if (r[C.biz] < 0) return false;
+  // 檢查是否有月份不符的情況
+  const hasMonthMismatch = monthMismatch();
+
+  let rows;
+  if (hasMonthMismatch) {
+    // 月份不符時，顯示所有未到檢的預約（不限制日期）
+    rows = allBizRows.filter(function (r) {
       return r[C.att] !== 1;  // 只顯示未到檢的
     });
+  } else {
+    // 月份符合時，使用原有的日期範圍篩選
+    rows = allBizRows.filter(function (r) {
+      const d = r[C.d];
+      if (!d) return false;
+      // 先嘗試符合日期範圍
+      if (d >= today && d <= to) {
+        if (r[C.att] === 1) return false;
+        return true;
+      }
+      return false;
+    });
+
+    // 如果未來日期沒有資料，顯示所有未到檢的預約（無論日期）
+    if (rows.length === 0) {
+      rows = allBizRows.filter(function (r) {
+        return r[C.att] !== 1;
+      });
+    }
   }
 
   // 風險篩選
