@@ -2896,6 +2896,8 @@ function viewWatch() {
 
   // 如果篩選後沒有資料，放寬條件顯示所有未到檢的預約
   let rows = detailRows().filter(function (r) {
+    // 只保留生技客服業務（排除企檢、診所、通路等非業務部門）
+    if (r[C.biz] < 0) return false;
     const d = r[C.d];
     if (!d) return false;
     // 先嘗試符合日期範圍
@@ -2909,6 +2911,8 @@ function viewWatch() {
   // 如果未來日期沒有資料，顯示所有未到檢的預約（無論日期）
   if (rows.length === 0) {
     rows = detailRows().filter(function (r) {
+      // 只保留生技客服業務
+      if (r[C.biz] < 0) return false;
       return r[C.att] !== 1;  // 只顯示未到檢的
     });
   }
@@ -3898,4 +3902,3 @@ boot();
 </script>
 </body>
 </html>
-
