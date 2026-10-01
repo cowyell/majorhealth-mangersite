@@ -2885,16 +2885,8 @@ function viewWatch() {
   const to = addDays(today, DB.watchDays);
   let h = '';
   
-  // 如果有月份不符，顯示提示
-  if (hasMonthMismatch) {
-    h += '<div class="notice" style="background:var(--amber-soft);border:1px solid var(--amber-line);padding:12px;margin-bottom:12px;border-radius:3px">' +
-      '<b>⚠️ 月份不符：</b>目前選擇 <b>' + esc(DB.filter.month || '—') + '</b>，但資料月份為 <b>' + esc(D.month || '—') + '</b>。<br>' +
-      '以下顯示所有未到檢的預約（不限日期）。' +
-      '</div>';
-  }
-  
   // 控制列
-  let ctrl = '<div class="srcline">' +
+  h += '<div class="srcline">' +
     '<span class="field"><label>檢視未來</label><span class="seg">' +
     [3,5,7,14].map(n => '<button data-wdays="' + n + '" aria-pressed="' + (DB.watchDays === n) + '">' + n + ' 天</button>').join('') +
     '</span></span>' +
@@ -2903,39 +2895,24 @@ function viewWatch() {
       return '<button class="chip" data-risk="' + x.id + '" aria-pressed="' + DB.watchRisk.has(x.id) + '">' + esc(x.name) + '</button>';
     }).join('') + '</span></span></div>';
 
-  // 取得所有生技客服業務的預約
+  // 取得所有生技客服業務的預約（排除企檢、診所、通路）
   const allBizRows = detailRows().filter(function (r) {
-    return r[C.biz] >= 0;  // 只保留生技客服業務
+    return r[C.biz] >= 0;  // 只保留有業務代碼的（生技客服）
   });
 
-  // 檢查是否有月份不符的情況
-  const hasMonthMismatch = monthMismatch();
+  // 篩選未來 N 天且未到檢的預約
+  let rows = allBizRows.filter(function (r) {
+    const d = r[C.d];
+    if (!d) return false;
+    if (d >= today && d <= to && r[C.att] !== 1) return true;
+    return false;
+  });
 
-  let rows;
-  if (hasMonthMismatch) {
-    // 月份不符時，顯示所有未到檢的預約（不限制日期）
+  // 如果未來日期沒有資料，放寬條件：顯示所有未到檢的預約
+  if (rows.length === 0) {
     rows = allBizRows.filter(function (r) {
       return r[C.att] !== 1;  // 只顯示未到檢的
     });
-  } else {
-    // 月份符合時，使用原有的日期範圍篩選
-    rows = allBizRows.filter(function (r) {
-      const d = r[C.d];
-      if (!d) return false;
-      // 先嘗試符合日期範圍
-      if (d >= today && d <= to) {
-        if (r[C.att] === 1) return false;
-        return true;
-      }
-      return false;
-    });
-
-    // 如果未來日期沒有資料，顯示所有未到檢的預約（無論日期）
-    if (rows.length === 0) {
-      rows = allBizRows.filter(function (r) {
-        return r[C.att] !== 1;
-      });
-    }
   }
 
   // 風險篩選
@@ -2946,6 +2923,7 @@ function viewWatch() {
       return true;
     });
   }
+  
   rows.sort((a, b) => (a[C.d] < b[C.d] ? -1 : a[C.d] > b[C.d] ? 1 : (a[C.cl] - b[C.cl])));
 
   // 業務彙總
@@ -2981,7 +2959,7 @@ function viewWatch() {
     h += '<div class="stack" style="margin-top:12px">' + panelPad('待檢名單', emptyBox(
       '未來 ' + DB.watchDays + ' 天沒有符合條件的名單',
       DB.watchRisk.size ? '試著放寬風險條件，或把天數拉長。' : (monthMismatch() ? '明細檔只有 ' + DB.D.month + ' 的資料。' : '這個期間沒有已預約但尚未到檢的人員。'))) + '</div>';
-    return ctrl + h;
+    return h;
   }
   const byDate = {};
   rows.forEach(function (r) { if (!byDate[r[C.d]]) byDate[r[C.d]] = []; byDate[r[C.d]].push(r); });
@@ -3010,19 +2988,10 @@ function viewWatch() {
     });
     list += '</tbody></table></div></details>';
   });
-  CSV_EXPORTS['watch.list'] = function () {
-    return csvOf(['檢日','星期','業務','診所','受檢者','年齡','類別','金額','繳費','風險'],
-      rows.map(function (r) {
-        const rk = riskOf(r).map(function (x) { const d = RISKS.find(y => y.id === x); return d ? d.name : x; }).join('/');
-        return [r[C.d], wdOf(r[C.d]), bizLabel(r), clName(dict('cl', r[C.cl])), r[C.cust], r[C.age] == null ? '' : r[C.age],
-          dict('cat', r[C.cat]), r[C.amt], r[C.pay] ? '已繳' : '未繳', rk];
-      }));
-  };
-  h += '<div class="stack" style="margin-top:12px">' + panelPad('待檢名單（' + num(rows.length) + ' 位 · 依檢日排序）', list, csvBtn('watch.list')) + '</div>';
-  return ctrl + h;
+  h += '<div class="stack" style="margin-top:12px">' + panelPad('待檢名單（' + num(rows.length) + ' 位 · 依檢日排序）', list) + '</div>';
+  return h;
 }
 
-/* ============================ 異常異動 ============================ */
 function viewDelta() {
   const D = DB.D, today = todayISO(), y = addDays(today, -1);
   let h = '';
